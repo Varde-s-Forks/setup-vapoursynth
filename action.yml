@@ -89,14 +89,14 @@ runs:
         popd
 
     - name: Save zimg build cache
-      if: steps.zimg-cache.cache-hit == 'false'
+      if: steps.zimg-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         key: zimg-build-${{ hashFiles('zimg/configure.ac','zimg/Makefile.am') }}
         path: zimg
 
     - name: Save VapourSynth build cache
-      if: steps.vapoursynth-cache.cache-hit == 'false'
+      if: steps.vapoursynth-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         key: vapoursynth-build-${{ inputs.vapoursynth-version }}-${{ hashFiles('vapoursynth/setup.py','vapoursynth/configure.ac') }}
