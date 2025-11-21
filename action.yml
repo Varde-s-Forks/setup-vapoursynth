@@ -35,19 +35,25 @@ runs:
       with:
         path: zimg
         key: zimg-build-${{ hashFiles('zimg/configure.ac','zimg/Makefile.am') }}
-        restore-keys: |
-          zimg-build-
+        restore-keys: zimg-build-
 
     - name: Restore VapourSynth build cache
-      id: vapoursynth-cache
+      id: vs-build-cache
       uses: actions/cache/restore@v4
       with:
         path: vapoursynth
-        key: vapoursynth-build-${{ inputs.vapoursynth-version }}-${{ hashFiles('vapoursynth/setup.py','vapoursynth/configure.ac') }}
-        restore-keys: |
-          vapoursynth-build-
+        key: vapoursynth-build-${{ inputs.vapoursynth-version }}-${{ hashFiles('vapoursynth/configure.ac','vapoursynth/Makefile.am','vapoursynth/setup.py') }}
+        restore-keys: vapoursynth-build-
 
-    - name: Install zimg
+    - name: Restore VapourSynth wheel cache
+      id: vs-wheel-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/pip/wheels
+        key: vs-wheels-${{ inputs.vapoursynth-version }}-${{ inputs.python-version }}
+        restore-keys: vs-wheels-
+
+    - name: Build & Install zimg
       env:
         CC: gcc-14
         CXX: g++-14
@@ -65,11 +71,11 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install Python dependencies
+    - name: Install Python build deps
       shell: bash
       run: pip install -U pip build cython setuptools wheel
 
-    - name: Install VapourSynth
+    - name: Build & Install VapourSynth C library
       env:
         CC: gcc-14
         CXX: g++-14
@@ -80,13 +86,13 @@ runs:
         ./configure --prefix=/usr
         make -j$(nproc)
         sudo make install -j$(nproc)
-        sudo mkdir -p /usr/lib/vapoursynth
-        python setup.py sdist -d sdist
-        mkdir -p empty
-        pushd empty
-        pip install vapoursynth --no-index --find-links ../sdist --no-build-isolation
         popd
-        popd
+
+    - name: Build VapourSynth wheel (if missing)
+      if: steps.vs-wheel-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        pip wheel vapoursynth -w ~/.cache/pip/wheels
 
     - name: Save zimg build cache
       if: steps.zimg-cache.outputs.cache-hit != 'true'
@@ -96,17 +102,26 @@ runs:
         path: zimg
 
     - name: Save VapourSynth build cache
-      if: steps.vapoursynth-cache.outputs.cache-hit != 'true'
+      if: steps.vs-build-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        key: vapoursynth-build-${{ inputs.vapoursynth-version }}-${{ hashFiles('vapoursynth/setup.py','vapoursynth/configure.ac') }}
+        key: vapoursynth-build-${{ inputs.vapoursynth-version }}-${{ hashFiles('vapoursynth/configure.ac','vapoursynth/Makefile.am','vapoursynth/setup.py') }}
         path: vapoursynth
 
-    - name: Remove hashFiles
+    - name: Save VapourSynth wheel cache
+      if: steps.vs-wheel-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        key: vs-wheels-${{ inputs.vapoursynth-version }}-${{ inputs.python-version }}
+        path: ~/.cache/pip/wheels
+
+
+    ###################################################
+    # Install from wheel
+    ###################################################
+    - name: Install VapourSynth Python module
       shell: bash
-      run: |
-        rm -rf zimg
-        rm -rf vapoursynth
+      run: pip install vapoursynth --no-index --find-links ~/.cache/pip/wheels
 
     - name: Verify VapourSynth install
       shell: python
